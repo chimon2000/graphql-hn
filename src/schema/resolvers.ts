@@ -1,19 +1,20 @@
 const { ObjectID } = require('mongodb')
 import { URL } from 'url'
+import pubsub from '../pubsub'
 
 class ValidationError extends Error {
-    constructor(message, public field) {
-      super(message);
-    }
+  constructor(message, public field) {
+    super(message)
   }
+}
 
 function validateLink({ url }) {
   try {
-      console.log(url)
+    console.log(url)
     new URL(url)
   } catch (error) {
-      throw new ValidationError('Link validation error: invalid url.', 'url');
-    }
+    throw new ValidationError('Link validation error: invalid url.', 'url')
+  }
 }
 
 const getId = root => root._id || root.id
@@ -34,12 +35,11 @@ export default {
       }
       const { insertedIds: [id] } = await Links.insert(link)
 
-      return Object.assign(
-        {
-          id
-        },
-        link
-      )
+      const created = Object.assign({ id }, link)
+
+      pubsub.publish('Link', { Link: { mutation: 'CREATED', node: created } })
+
+      return created
     },
     async createUser(root, { name, authProvider }, { mongo: { Users } }) {
       const user = {
@@ -70,6 +70,11 @@ export default {
       if (email.password === user.password) {
         return { token: `token-${user.email}`, user }
       }
+    }
+  },
+  Subscription: {
+    Link: {
+      subscribe: () => pubsub.asyncIterator('Link')
     }
   },
   Link: {
